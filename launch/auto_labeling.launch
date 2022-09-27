@@ -1,0 +1,9 @@
+<launch>
+
+    <!-- <include file="$(find turtlebot2i_bringup)/launch/minimal.launch"/> -->
+    <include file="$(find astra_camera )/launch/astra.launch"/>
+
+    <node pkg="aruco_labeling" name="aruco_labeling" type="aruco_labeling.py" output="screen" required="true"> 
+        <remap from="~camera_in" to="/camera/rgb/image_raw"/>
+    </node>
+</launch>
