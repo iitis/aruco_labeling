@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 
 import tensorflow as tf
-from tensorflow.keras.applications.mobilenet import preprocess_input, decode_predictions
+from tensorflow.keras.applications import mobilenet
 import numpy as np
 
 class Model(Enum):
@@ -19,9 +19,11 @@ class Model(Enum):
 
 class ClassificationManager:
 
-    def __init__(self, model_id):
+    def __init__(self, model_id, verbose=0):
+        self.model_id = model_id
+        self.verbose = verbose
         self.model = None
-        if model_id == Model.MOBILE_NET_V1:
+        if self.model_id == Model.MOBILE_NET_V1:
             self.model = tf.keras.applications.MobileNet(
                 input_shape=None,
                 alpha=1.0,
@@ -41,11 +43,13 @@ class ClassificationManager:
         dim =  (self.model.layers[0].input_shape[0][1], self.model.layers[0].input_shape[0][2])
         x = tf.keras.preprocessing.image.img_to_array(cv2.resize(image, dim, interpolation = cv2.INTER_AREA))
         x = np.expand_dims(x, axis=0)
-        x = preprocess_input(x)
-        return self.model.predict(x)
+        if self.model_id == Model.MOBILE_NET_V1:
+            x = mobilenet.preprocess_input(x)
+            return self.model.predict(x, verbose=self.verbose)
 
     def get_printable_predictions(self, preds):
-        return decode_predictions(preds, top=3)[0]
+        if self.model_id == Model.MOBILE_NET_V1:
+            return mobilenet.decode_predictions(preds, top=3)[0]
 
 class ArucoManager:
     def __init__(self):
@@ -62,17 +66,17 @@ class ArucoManager:
 
 class Node():
     def __init__(self):
-        self.br = CvBridge()
-        self.sub = rospy.Subscriber("~camera_in", Image, self.image_callback)
-        self.pub = rospy.Publisher('~aruco_image', Image, queue_size=10)
-
         self.aruco = ArucoManager()
-        self.ml = ClassificationManager(Model.MOBILE_NET_V1)
+        self.ml = ClassificationManager(Model.MOBILE_NET_V1, 1)
 
-        self.image = None
         self.message_lock = Lock()
         self.thread_executor = ThreadPoolExecutor(5)
         self.ml_future = self.thread_executor.submit(self.preprocess_and_detect, None, None)
+
+        self.image = None
+        self.br = CvBridge()
+        self.sub = rospy.Subscriber("~camera_in", Image, self.image_callback)
+        self.pub = rospy.Publisher('~aruco_image', Image, queue_size=10)
 
     def image_callback(self, msg):
         with self.message_lock:
@@ -104,8 +108,11 @@ class Node():
         if image is None or ids is None:
             return False
 
-        preds = self.ml.predict(image)
-        print('Predicted:', self.ml.get_printable_predictions(preds))
+        # example ids for 1 detected marker: [[0]]
+        # example ids for 2 detected markers: [[1][0]]
+        if len(ids) == 1 and len(ids[0]) == 1:
+            preds = self.ml.predict(image)
+            print(f"Aruco id: {ids[0][0]} - predicted: {self.ml.get_printable_predictions(preds)}")
 
         return True
 
