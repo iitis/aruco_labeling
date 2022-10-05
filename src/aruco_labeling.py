@@ -77,11 +77,14 @@ class LabelingNode():
         self.ml_future = self.thread_executor.submit(self.preprocess_and_detect, None, None, None)
 
         self.image = None
+        self.depth = None
         self.br = CvBridge()
         self.sub = rospy.Subscriber("~camera_in", Image, self.image_callback)
+        self.depth_sub = rospy.Subscriber("~depth_in", Image, self.depth_callback)
         self.pub = rospy.Publisher('~aruco_image', Image, queue_size=10)
         self.detection_period = rospy.Duration(rospy.get_param('~detection_period', 5))
         self.last_detection_time = rospy.Time.from_sec(0)
+        self.distance_threshold = rospy.get_param('~distance_threshold', 5)
         self.result_filename = None
         self.result_counter = 0
         self.output_dir = Path(rospy.get_param('~output_dir', ""))
@@ -91,6 +94,19 @@ class LabelingNode():
     def image_callback(self, msg):
         with self.message_lock:
             self.image = self.br.imgmsg_to_cv2(msg, "bgr8")
+
+    def depth_callback(self, msg):
+        self.depth = self.br.imgmsg_to_cv2(msg, "32FC1")
+
+    def get_distance_to_pixel(self, point):
+        if self.depth is None:
+            return 0.0
+
+        rows,cols = self.depth.shape
+        if point[1] > rows or point[0] > cols:
+            return 0.0
+
+        return self.depth[int(point[1]), int(point[0])]
 
     def spin(self):
         loop_rate = rospy.Rate(30)
@@ -122,6 +138,10 @@ class LabelingNode():
         # example ids for 2 detected markers: [[1][0]]
         if len(ids) == 1 and len(ids[0]) == 1:
             if rospy.Time.now() - self.last_detection_time < self.detection_period:
+                return False
+
+            dist = self.get_distance_to_marker(corners[0][0])
+            if dist > self.distance_threshold:
                 return False
 
             image = self.remove_marker(image, np.array(corners[0][0]))
@@ -160,6 +180,12 @@ class LabelingNode():
                        image[min_y-shift, min_x-shift, :].astype(int)) / 4).astype(np.uint8, casting='unsafe')
         image[min_y:max_y, min_x:max_x, :] = mean_color
         return image
+
+    def get_distance_to_marker(self, corners):
+        sum = 0
+        for i in range(4):
+            sum += self.get_distance_to_pixel(corners[i])
+        return sum / 4.0 / 1000.0
 
     def blur_background(self, image):
         # TODO: bluring background
