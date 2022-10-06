@@ -85,6 +85,12 @@ class LabelingNode():
         self.detection_period = rospy.Duration(rospy.get_param('~detection_period', 5))
         self.last_detection_time = rospy.Time.from_sec(0)
         self.distance_threshold = rospy.get_param('~distance_threshold', 5)
+        self.depth_behind = rospy.get_param('~depth_behind', 0.3)
+        self.depth_ahead = rospy.get_param('~depth_ahead', 0.2)
+        self.crop_size = rospy.get_param('~crop_size', 10)
+        self.remove_marker = rospy.get_param('~remove_marker', False)
+        self.blur_background = rospy.get_param('~blur_background', False)
+        self.crop_object = rospy.get_param('~crop_object', False)
         self.result_filename = None
         self.result_counter = 0
         self.output_dir = Path(rospy.get_param('~output_dir', ""))
@@ -144,29 +150,35 @@ class LabelingNode():
             if dist > self.distance_threshold:
                 return False
 
-            image = self.remove_marker(image, np.array(corners[0][0]))
-            image = self.blur_background(image)
+            corner = np.array(corners[0][0])
+            if self.remove_marker:
+                image = self.preprocess_remove_marker(image, corner)
+            if self.blur_background:
+                image = self.preprocess_blur_background(image, dist)
+            if self.crop_object:
+                image = self.preprocess_crop_object(image, corner)
 
             preds = self.ml.predict(image)
             print(f"Aruco id: {ids[0][0]} - predicted: {self.ml.get_printable_predictions(preds)}")
-            self.store_result(image, ids[0][0], np.argmax(preds, axis=1)[0])
+            classes_id = np.argsort(-preds, axis=1)[0]
+            self.store_result(image, ids[0][0], classes_id[0], classes_id[1], classes_id[2], classes_id[3], classes_id[4])
             self.last_detection_time = rospy.Time.now()
 
         return True
 
-    def store_result(self, image, aruco_id, class_id):
+    def store_result(self, image, aruco_id, class_id1, class_id2, class_id3, class_id4, class_id5):
         if self.result_filename is None:
             self.result_filename = f"{self.model_id.name}_labeling.csv"
             self.result_filename = self.output_dir / self.result_filename
-            np.savetxt(self.result_filename, [["id, image_name, aruco_id, class_id"]], delimiter=',', fmt='%s')
+            np.savetxt(self.result_filename, [["id,image_name,aruco_id,class_id1,class_id2,class_id3,class_id4,class_id5"]], delimiter=',', fmt='%s')
 
         image_name = f"{self.result_counter}.jpg"
         cv2.imwrite(str(self.output_dir / image_name), image)
         with open(self.result_filename,'a') as csvfile:
-            np.savetxt(csvfile, [[self.result_counter, image_name, aruco_id, class_id]], delimiter=',', fmt='%s')
+            np.savetxt(csvfile, [[self.result_counter, image_name, aruco_id, class_id1, class_id2, class_id3, class_id4, class_id5]], delimiter=',', fmt='%s')
         self.result_counter += 1
 
-    def remove_marker(self, image, corners):
+    def preprocess_remove_marker(self, image, corners):
         x = np.array([corners[0][0], corners[1][0], corners[2][0], corners[3][0]])
         y = np.array([corners[0][1], corners[1][1], corners[2][1], corners[3][1]])
         min_x = int(np.amin(x))
@@ -178,7 +190,8 @@ class LabelingNode():
                        image[min_y-shift, max_x+shift, :].astype(int) + 
                        image[max_y+shift, min_x-shift, :].astype(int) + 
                        image[min_y-shift, min_x-shift, :].astype(int)) / 4).astype(np.uint8, casting='unsafe')
-        image[min_y:max_y, min_x:max_x, :] = mean_color
+        cv_corners = [np.array([[px, py] for px, py in corners]).astype(int)]
+        cv2.drawContours(image, cv_corners, 0, (155, 155, 155), -1, cv2.LINE_AA)
         return image
 
     def get_distance_to_marker(self, corners):
@@ -187,9 +200,40 @@ class LabelingNode():
             sum += self.get_distance_to_pixel(corners[i])
         return sum / 4.0 / 1000.0
 
-    def blur_background(self, image):
-        # TODO: bluring background
+    def preprocess_blur_background(self, image, dist):
+        if image is None or self.depth is None:
+            return image
+
+        depth = self.depth
+        depth /= 1000
+        depth[depth < dist-self.depth_behind] = 0
+        depth[depth > dist+self.depth_ahead] = 0
+        depth[depth != 0] = 255
+        mask = depth.astype(np.uint8)
+        mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB)
+        blur = cv2.blur(image, (100,100), 0)
+        image[mask==(0,0,0)] = blur[mask==(0,0,0)]
         return image
+
+    def preprocess_crop_object(self, image, corners):
+        x = np.array([corners[0][0], corners[1][0], corners[2][0], corners[3][0]])
+        y = np.array([corners[0][1], corners[1][1], corners[2][1], corners[3][1]])
+        min_x = int(np.amin(x))
+        max_x = int(np.amax(x))
+        min_y = int(np.amin(y))
+        max_y = int(np.amax(y))
+        center_x = int((min_x + max_x) / 2)
+        center_y = int((min_y + max_y) / 2)
+        d_x = ((max_x - min_x)/2)
+        d_y = ((max_y - min_y)/2)
+        d = max(d_x, d_y)
+        crop_size_x = int(self.crop_size*d)
+        crop_size_y = int(self.crop_size*d)
+        left_x = max(center_x - crop_size_x, 0)
+        right_x = min(center_x + crop_size_x, image.shape[1])
+        up_y = max(center_y - crop_size_y, 0)
+        down_y = min(center_y + crop_size_y, image.shape[0])
+        return image[up_y:down_y, left_x:right_x]
 
 if __name__ == '__main__':
     rospy.init_node("aruco_labeling", anonymous=True)
