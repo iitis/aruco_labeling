@@ -190,8 +190,9 @@ class LabelingNode():
                        image[min_y-shift, max_x+shift, :].astype(int) + 
                        image[max_y+shift, min_x-shift, :].astype(int) + 
                        image[min_y-shift, min_x-shift, :].astype(int)) / 4).astype(np.uint8, casting='unsafe')
+        new_color = (int(mean_color[0]), int(mean_color[1]), int(mean_color[2]))
         cv_corners = [np.array([[px, py] for px, py in corners]).astype(int)]
-        cv2.drawContours(image, cv_corners, 0, (155, 155, 155), -1, cv2.LINE_AA)
+        cv2.drawContours(image, cv_corners, 0, new_color, -1, cv2.LINE_AA)
         return image
 
     def get_distance_to_marker(self, corners):

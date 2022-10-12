@@ -1,6 +1,6 @@
 <launch>
 
-    <!-- <include file="$(find turtlebot2i_bringup)/launch/minimal.launch"/> -->
+    <include file="$(find turtlebot2i_bringup)/launch/minimal.launch"/>
     <include file="$(find astra_camera )/launch/astra.launch"/>
 
     <node pkg="aruco_labeling" name="aruco_labeling" type="aruco_labeling.py" output="screen" required="true">
