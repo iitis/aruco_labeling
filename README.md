@@ -2,7 +2,7 @@
 
 ROS package to auto labeling objects from images based on ArUco markers.
 
-The software can be used to test deep learning systems in real time directly on a robot. All you have to do is stick the markers on the objects, and the robot will automatically detect the objects and create dataset with images. The collected data can be used to valide performance of the different ML models or even to train the models. 
+The software can be used to test deep learning systems for object recognition in real time directly on a robot. All you have to do is stick the markers on the objects, and the robot will automatically detect the objects and create dataset with images. The collected data can be used to valide performance of the different ML models. Our implemented method can be potential used to train the deep learning models as well.
 
 The results are proceeding in IEEE International Conference on Big Data 2022.
 
