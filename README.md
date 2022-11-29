@@ -2,6 +2,8 @@
 
 ROS package to auto labeling objects from images based on ArUco markers.
 
+The software can be used to test deep learning systems in real time directly on a robot. All you have to do is stick the markers on the objects, and the robot will automatically detect the objects and create dataset with images. The collected data can be used to valide performance of the different ML models or even to train the models. 
+
 The results are proceeding in IEEE International Conference on Big Data 2022.
 
 Filus K., Sobczak Ł., Domańska J., Domański A., Cupek R., "Real-time testing of vision-based systems for AGVs with ArUco markers", _IEEE International Conference on Big Data_, 2022
@@ -14,7 +16,7 @@ Filus K., Sobczak Ł., Domańska J., Domański A., Cupek R., "Real-time testing 
 
 ## Running the code
 
-To run the aruco_labeling node you can just modify the launch file ``launch/auto_labeling.launch`` and run it as follow:
+To run the aruco_labeling node you can just modify the launch file ``launch/auto_labeling.launch`` and run it using the following command:
 
 ```sh
 roslaunch aruco_labeling auto_labeling.launch
@@ -22,7 +24,7 @@ roslaunch aruco_labeling auto_labeling.launch
 
 ## ROS interface
 
-We provide our code as a ROS node for easy use in robotic applications. ROS API for the node is following:
+We provide our code as a ROS node for easy use in robotic applications. The ROS interface of the node consists of the following elements:
 
 ### Published Topics
 
